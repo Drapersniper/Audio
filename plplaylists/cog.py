@@ -274,7 +274,7 @@ class PyLavPlaylists(
         if not playlist:
             return
         if invoked_with_start:
-            await self.command_playlist_play.callback(self, context, playlist=[playlist])  # type: ignore
+            await self.command_playlist_play.callback(self, context, playlist=[playlist], reverse=False)  # type: ignore
             return
         if invoked_with_info:
             await PaginatingMenu(
@@ -576,10 +576,18 @@ class PyLavPlaylists(
         name="play",
         description=_("Enqueue a playlist"),
     )
-    @app_commands.describe(playlist=_("The playlist to enqueue"))
+    @app_commands.describe(
+        playlist=_("The playlist to enqueue"),
+        reverse=_("Set whether the playlist should be queued starting from the last track"),
+    )
     @app_commands.guild_only()
     @invoker_is_dj(slash=True)
-    async def slash_playlist_play(self, interaction: DISCORD_INTERACTION_TYPE, playlist: PlaylistConverter):
+    async def slash_playlist_play(
+        self,
+        interaction: DISCORD_INTERACTION_TYPE,
+        playlist: PlaylistConverter,
+        reverse: bool = False,
+    ):
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
         context = await self.bot.get_context(interaction)
@@ -588,7 +596,7 @@ class PyLavPlaylists(
         playlist = await maybe_prompt_for_playlist(cog=self, playlists=playlists, context=context)
         if not playlist:
             return
-        await self.command_playlist_play.callback(self, context, playlist=[playlist])  # type: ignore
+        await self.command_playlist_play.callback(self, context, playlist=[playlist], reverse=reverse)  # type: ignore
 
     @slash_playlist.command(
         name="delete",
@@ -994,7 +1002,7 @@ class PyLavPlaylists(
 
     @commands.command(name="__command_playlist_play", hidden=True)
     @always_hidden()
-    async def command_playlist_play(self, context: PyLavContext, *, playlist: PlaylistConverter):
+    async def command_playlist_play(self, context: PyLavContext, *, playlist: PlaylistConverter, reverse: bool):
         if isinstance(context, discord.Interaction):
             context = await self.bot.get_context(context)
         if context.interaction and not context.interaction.response.is_done():
@@ -1031,6 +1039,8 @@ class PyLavPlaylists(
         track_count = await playlist.size()
 
         tracks = await playlist.fetch_tracks()
+        if reverse:
+            tracks = list(reversed(tracks))
         track_objects = [from_dict(data_class=Track_namespace_conflict, data=track) for track in tracks]
         await player.bulk_add(
             requester=context.author.id,
